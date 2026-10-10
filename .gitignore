@@ -5,6 +5,7 @@ node_modules/
 
 # Production / Build output
 dist/
+frontend/dist/
 build/
 *.egg-info/
 .eggs/
@@ -12,9 +13,11 @@ build/
 # Python cache and bytecode
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .pytest_cache/
+backend/.pytest_cache/
 .coverage
 htmlcov/
 .mypy_cache/
@@ -30,6 +33,9 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
 backend/opportunityos.db
 
 # Virtual environments
@@ -48,6 +54,9 @@ desktop.ini
 *.swp
 *.swo
 *~
+.gsd/
+.vite/
+frontend/.vite/
 
 # Logs
 *.log

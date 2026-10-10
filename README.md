@@ -17,12 +17,12 @@ OpportunityOS is an AI-powered career opportunity platform for students and fres
 
 | # | File | What it covers |
 |---|------|----------------|
-| 1 | `01_PRD/OpportunityOS_PRD.docx` | Product requirements: problem, users, features with acceptance criteria, MVP / Phase 2 / Future |
-| 2 | `02_TRD/OpportunityOS_TRD.docx` | Technical requirements: architecture, agent design, SerpApi, workflows, security, deployment |
-| 3 | `03_APP_WEB_FLOW/OpportunityOS_App_Web_Flow.docx` | Every screen, route, API call, and loading/empty/error state |
-| 4 | `04_UI_UX/OpportunityOS_UI_UX_Specification.docx` | Design system and text wireframes |
-| 5 | `05_BACKEND_SCHEMA/OpportunityOS_Backend_Schema_API.docx` | PostgreSQL schema (16 tables + DDL) and full API reference |
-| 6 | `06_IMPLEMENTATION_PLAN/OpportunityOS_Implementation_Plan.docx` | 10-day plan, Git strategy, testing, deployment and demo checklists |
+| 1 | `planing/OpportunityOS_PRD.md` | Product requirements: problem, users, features with acceptance criteria, MVP / Phase 2 / Future |
+| 2 | `planing/OpportunityOS_TRD.md` | Technical requirements: architecture, agent design, SerpApi, workflows, security, deployment |
+| 3 | `planing/OpportunityOS_App_Web_Flow.md` | Every screen, route, API call, and loading/empty/error state |
+| 4 | `planing/OpportunityOS_UI_UX_Specification.md` | Design system and text wireframes |
+| 5 | `planing/OpportunityOS_Backend_Schema_API.md` | Database schema (16 tables + DDL) and full API reference |
+| 6 | `planing/OpportunityOS_Implementation_Plan.md` | Implementation plan, Git strategy, testing, deployment and checklists |
 
 ---
 
@@ -83,50 +83,53 @@ Learn React → Build project → Learn REST API → Apply
 
 ```mermaid
 flowchart LR
-  U[Student / Fresher<br/>Browser] --> FE[React + Tailwind SPA<br/>Vercel]
-  FE -- HTTPS + JWT --> API[FastAPI Backend<br/>Render / Railway / Fly.io]
+  U[Student / Fresher<br/>Browser] --> FE[React + Tailwind SPA<br/>Vite + TypeScript]
+  FE -- HTTPS + JWT --> API[FastAPI Backend<br/>Uvicorn / Gunicorn]
   API --> AUTH[Auth Module<br/>JWT + bcrypt]
-  API --> AG[AI Career Agent<br/>Orchestrator]
-  AG --> LLM[LLM Provider<br/>tool / function calling]
-  AG --> SERP[SerpApi Client]
-  SERP --> SA[(SerpApi<br/>google_jobs / google /<br/>google_news / youtube)]
-  AG --> MATCH[Matching Engine<br/>deterministic Python]
-  AG --> GAP[Skill Gap + Roadmap]
-  API --> DB[(PostgreSQL<br/>Neon / Supabase / Render)]
+  API --> AG[Discovery Agent<br/>Orchestrator]
+  AG --> QP[Deterministic Query Planner<br/>Optional LLM Augmentation]
+  AG --> SERP[Multi-Engine SerpApi Client<br/>google_jobs / google / google_news]
+  SERP --> SA[(SerpApi External API<br/>Live Index)]
+  AG --> MATCH[Deterministic Match Engine<br/>5-Pillar Profile Alignment]
+  AG --> GAP[Skill Gap Aggregator]
+  AG --> RM[Template Roadmap Generator<br/>Milestone Continuity & Preservation]
+  API --> DB[(SQLite / PostgreSQL<br/>Safe Auto-Migration)]
   AG --> DB
-  SERP --> CACHE[(serp_cache table)]
+  SERP --> CACHE[(serp_cache table<br/>Quota Protection)]
 ```
 
-- **Frontend:** React SPA on Vercel.
-- **Backend:** FastAPI on Render / Railway / Fly.io.
-- **Agent:** fixed tool pipeline running as an in-process background task; the UI polls session progress.
-- **Scoring:** pure Python (not the LLM) — reproducible and explainable.
-- **Database:** PostgreSQL (Neon / Supabase / Render), including a SerpApi response cache.
+- **Frontend:** React 18 SPA built with Vite, TypeScript, and Tailwind CSS.
+- **Backend:** FastAPI on Python 3.11 with SQLite/PostgreSQL support.
+- **Agent Lifecycle:** Asynchronous background workflow polling session status with timeout recovery and atomic quota accounting.
+- **Query Planning:** Fast deterministic query generator deriving search tokens dynamically from target role, location, and selected opportunity types (hackathons, grants, fellowships, internships, etc.), with optional LLM augmentation when configured.
+- **Scoring Engine:** Deterministic 5-pillar mathematical profile alignment (Skills 50%, Role 15%, Location 15%, Experience 10%, Type 10%) — 100% explainable and reproducible.
+- **Roadmap Generation:** Structured Learn → Build → Apply roadmap template grounded in actual extracted skill gaps and matched opportunities, preserving completed milestone progress across repeat scans.
+- **Database:** SQLite (default development) and PostgreSQL, using safe schema migrations (`migrate_database`) to support category constraints and metadata columns.
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React.js, TypeScript (or JavaScript), Tailwind CSS, Vite, React Router, TanStack Query |
-| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2 |
-| AI | LLM with tool/function calling (provider chosen by team; provider-agnostic adapter) |
+| Frontend | React.js, TypeScript, Tailwind CSS, Vite, React Router |
+| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic v2 |
+| AI / Search | Deterministic query planning, multi-engine SerpApi client, template roadmaps |
 | Search | SerpApi — `google_jobs`, `google`, `google_news`, optional `youtube` |
-| Database | PostgreSQL |
+| Database | SQLite & PostgreSQL (auto-migrated) |
 | Auth | JWT (HS256) + bcrypt |
-| Deployment | Vercel (frontend), Render / Railway / Fly.io (backend), cloud PostgreSQL |
+| Deployment | Vercel / Netlify (frontend), Render / Fly.io / Docker (backend) |
 
 ## SerpApi usage
 
 | Engine | Purpose | Results key |
 |---|---|---|
 | `google_jobs` | Primary opportunities (title, company, location, via, description, highlights, apply options) | `jobs_results` |
-| `google` | Career pages, internship programs | `organic_results` |
+| `google` | Career pages, hackathons, grant programs, fellowships | `organic_results` |
 | `google_news` | Hiring trends shown as "market signals" (never as applyable opportunities) | `news_results` |
 | `youtube` *(Phase 2)* | Tutorials for roadmap steps (`search_query` param) | `video_results` |
 
 - Endpoint: `GET https://serpapi.com/search.json` with `engine`, `q`, `location`, `gl=in`, `hl=en`, `api_key`.
 - Responses cached in `serp_cache` (default 12 h TTL) and shared across users; per-user and daily budgets protect quota.
-- **No fabricated listings.** Tests and demo warm-up use real responses captured from SerpApi.
+- **No fabricated listings.** Tests and demo warm-up use real responses captured from SerpApi, cleanly namespaced (`demo:`) to prevent collision with live listings.
 
 ## AI Agent workflow
 
@@ -134,17 +137,17 @@ flowchart LR
 flowchart TD
   A[POST /agent/search] --> C[Create AgentSession status=queued<br/>return 202 + session_id]
   C --> B[BackgroundTask: load UserProfile, UserSkill, CareerGoal<br/>status=running]
-  B --> D[LLM tool: plan_queries<br/>3-6 queries across engines]
-  D --> E[Tool: serp_search per query<br/>cache first]
-  E --> F[Normalize to Opportunity schema]
-  F --> G[De-duplicate via dedupe_hash]
-  G --> H[Tool: extract_skills<br/>dictionary first, LLM fallback]
-  H --> I[Deterministic match scoring]
-  I --> J[Aggregate SkillGap]
-  J --> K[LLM tool: generate_roadmap]
+  B --> D[Deterministic Query Planner<br/>dynamic year + categories: hackathons, grants, etc.]
+  D --> E[Multi-Engine Search per query<br/>atomic quota check + cache first]
+  E --> F[Normalize to Opportunity schema<br/>negative-aware remote detection]
+  F --> G[De-duplicate via dedupe_hash<br/>demo / live namespace separation]
+  G --> H[Extract Skills<br/>canonical dictionary matching]
+  H --> I[Deterministic Match Scoring<br/>5 pillars + confidence warnings]
+  I --> J[Aggregate Skill Gaps]
+  J --> K[Grounded Template Roadmap<br/>preserves completed milestone progress]
   K --> L[Persist + AgentSession status=completed]
   L --> M[Client polling GET /agent/sessions/id<br/>receives result_summary]
-  E -. SerpApi error .-> X[Partial results + warning]
+  E -. SerpApi error .-> X[Partial results + fallback notice]
   X --> F
 ```
 
@@ -176,21 +179,21 @@ skill_score = Σ(weight of matched skills) / Σ(weight of all opportunity skills
 
 ## Local setup
 
-**Prerequisites:** Git, Node.js 20 LTS, Python 3.11, PostgreSQL 15+ (local Docker or cloud), a SerpApi key, and an LLM API key.
+**Prerequisites:** Git, Node.js 20 LTS, Python 3.11, SQLite 3 or PostgreSQL 15+ (local Docker or cloud), and optional SerpApi key (demo simulation mode operates without an API key).
 
 ```bash
 git clone <repo-url> opportunityos && cd opportunityos
 
-# Optional local database
+# Optional PostgreSQL database (or use default local SQLite: sqlite:///./opportunityos.db)
 docker run --name oos-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=opportunityos -p 5432:5432 -d postgres:16
 
 # Backend
 cd backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                                # fill in keys
-alembic upgrade head
-python -m seeds.load_skills
+cp .env.example .env                                # fill in keys (or use defaults)
+# Database tables initialize automatically on app startup via SQLAlchemy Base.metadata.create_all()
+python -m seeds.load_skills                         # or python -m seeds.seed_demo for demo user
 
 # Frontend (new terminal)
 cd frontend
@@ -204,24 +207,19 @@ cp .env.example .env
 # backend/.env
 APP_ENV=development
 API_PREFIX=
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/opportunityos
-JWT_SECRET=replace-with-32+-random-bytes
+DATABASE_URL=sqlite:///./opportunityos.db
+JWT_SECRET=opportunityos-super-secret-jwt-key-2026-hackathon-secure-32bytes
 JWT_EXPIRE_MINUTES=60
-CORS_ORIGINS=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173
 SERPAPI_API_KEY=
 SERPAPI_TIMEOUT_SECONDS=20
 SERP_CACHE_TTL_HOURS=12
 SERP_DAILY_BUDGET=80
 ENABLE_YOUTUBE=false
-LLM_PROVIDER=
-LLM_MODEL=
-LLM_API_KEY=
-LLM_TEMPERATURE=0.2
 AGENT_MAX_QUERIES=6
 AGENT_TIMEOUT_SECONDS=60
 GAP_TOP_N=15
 LOG_LEVEL=INFO
-LOG_LLM_PROMPTS=false
 
 # frontend/.env
 VITE_API_BASE_URL=http://localhost:8000
@@ -229,16 +227,16 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## Run commands
 
-| Task | Command |
-|---|---|
-| Backend dev server | `cd backend && uvicorn app.main:app --reload --port 8000` |
-| Backend tests | `cd backend && pytest -q` |
-| New migration | `cd backend && alembic revision --autogenerate -m "msg"` |
-| Frontend dev server | `cd frontend && npm run dev` (http://localhost:5173) |
-| Frontend tests | `cd frontend && npm test` |
-| Frontend build | `cd frontend && npm run build` |
-| Production backend | `gunicorn -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:$PORT` |
-| API docs | http://localhost:8000/docs |
+| Task | Command | Notes |
+|---|---|---|
+| Backend dev server | `cd backend && uvicorn app.main:app --reload --port 8000` | Uses `backend/opportunityos.db` when run from `backend/` |
+| Backend tests | `cd backend && pytest -v` | Run tests against an isolated test database |
+| Seed skills catalog | `cd backend && python -m seeds.load_skills` | Seeds 250+ canonical skills from `skills.csv` |
+| Seed demo scenario | `cd backend && python -m seeds.seed_demo` | Creates demo student (Mitva Satani) & runs agent |
+| Frontend dev server | `cd frontend && npm run dev` | Available at http://localhost:5173 |
+| Frontend build | `cd frontend && npm run build` | Runs TypeScript typecheck (`tsc`) + Vite production bundle |
+| Production backend | `gunicorn -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:$PORT` | Deployed backend entrypoint |
+| API docs | http://localhost:8000/docs | Interactive OpenAPI documentation |
 
 ## API overview
 

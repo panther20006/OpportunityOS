@@ -45,8 +45,16 @@ from app.api.routes import (
     search_history,
 )
 
+from app.db_migrate import migrate_database
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    try:
+        migrate_database(engine)
+    except Exception as e:
+        logger.warning(f"Database migration note: {e}")
+
     db = SessionLocal()
     try:
         skills_count = db.query(Skill).count()
@@ -111,7 +119,17 @@ def create_app() -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
-    # Health Check
+    # Root & Health Check
+    @app.get("/", tags=["Health"])
+    def root():
+        return {
+            "name": "OpportunityOS API",
+            "status": "online",
+            "environment": settings.APP_ENV,
+            "docs": "/docs",
+            "health": "/health",
+        }
+
     @app.get("/health", tags=["Health"])
     def health():
         return {

@@ -1,3 +1,4 @@
+import sys
 import jwt
 from fastapi import Request
 from slowapi import Limiter
@@ -25,7 +26,11 @@ def get_rate_limit_key(request: Request) -> str:
     return get_remote_address(request) or "127.0.0.1"
 
 
+is_test_env = settings.APP_ENV == "test" or "pytest" in sys.modules
+
 limiter = Limiter(
     key_func=get_rate_limit_key,
     default_limits=["120/minute"],
+    enabled=not is_test_env,
 )
+

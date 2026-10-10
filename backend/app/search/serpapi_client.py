@@ -15,10 +15,11 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def compute_cache_key(engine: str, params: Dict[str, Any]) -> str:
+def compute_cache_key(engine: str, params: Dict[str, Any], is_demo: bool = False) -> str:
     """
     Computes a deterministic SHA-256 fingerprint for a search query.
     Normalizes keys by sorting, stripping whitespaces, and omitting sensitive api keys.
+    Separates live and demo cache entries cleanly with a prefix namespace.
     """
     canonical: Dict[str, Any] = {}
     for k, v in sorted(params.items()):
@@ -29,16 +30,18 @@ def compute_cache_key(engine: str, params: Dict[str, Any]) -> str:
         else:
             canonical[k] = v
     serialized = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
-    return sha256(f"{engine.lower().strip()}:{serialized}".encode("utf-8")).hexdigest()
+    namespace = "demo:" if is_demo else "live:"
+    return sha256(f"{namespace}{engine.lower().strip()}:{serialized}".encode("utf-8")).hexdigest()
 
 
 class SerpApiClient:
     """
     Production-grade async SerpApi client with:
+    - Explicit separation between demo mode and live SerpApi mode
     - 24-hour persistent SQLite/PostgreSQL caching with upsert support
     - Quota protection & daily budget tracking
     - Resilient fallback to stale cache when quota or network degrades
-    - High-fidelity simulated responses for offline development & mock testing
+    - Truthful failure reporting: never silently substitute fabricated listings on live failures
     """
 
     def __init__(self, api_key: Optional[str] = None, cache_ttl_hours: Optional[int] = None):
@@ -47,6 +50,10 @@ class SerpApiClient:
         self.timeout = float(getattr(settings, "SERPAPI_TIMEOUT_SECONDS", 20))
         # Default to 24h persistent caching as specified in the architecture
         self.cache_ttl_hours = cache_ttl_hours or getattr(settings, "SERP_CACHE_TTL_HOURS", 24)
+
+    def is_demo_mode(self) -> bool:
+        """Determines if the client runs in demo mode (explicit config or missing API key)."""
+        return bool(getattr(settings, "DEMO_MODE", False) or not self.api_key)
 
     def check_daily_budget(self, db: Session) -> bool:
         """Verify that total live SerpApi calls today do not exceed the daily budget limit."""
@@ -116,7 +123,8 @@ class SerpApiClient:
             Tuple of (raw_json_dict, is_cached_bool, latency_ms_int)
         """
         start_time = time.time()
-        cache_key = compute_cache_key(engine, params)
+        is_demo = self.is_demo_mode()
+        cache_key = compute_cache_key(engine, params, is_demo=is_demo)
         now = utcnow()
 
         # 1. Check Cache
@@ -134,25 +142,24 @@ class SerpApiClient:
                 logger.info(f"SerpCache HIT for engine={engine}, query={params.get('q')}")
                 return cached.raw_json, True, latency_ms
 
-        # 2. Check Daily Quota Budget
-        if not self.check_daily_budget(db):
-            logger.warning("SerpApi daily budget reached")
-            # If stale cache exists, serve it to maintain high availability
-            if cached:
-                logger.info(f"Serving stale SerpCache for query={params.get('q')} due to budget limit")
-                latency_ms = int((time.time() - start_time) * 1000)
-                return cached.raw_json, True, latency_ms
-            raise AppError("SERPAPI_QUOTA", "Daily search quota reached", 503)
-
-        # 3. Simulated Response (if no API key provided or running in mock mode)
-        if not self.api_key:
-            logger.warning(f"No SERPAPI_API_KEY provided; generating simulated response for engine={engine}")
+        # 2. Simulated / Demo Mode (if explicit DEMO_MODE or no API key)
+        if is_demo:
+            logger.info(f"Demo mode active; generating high-fidelity sample responses for engine={engine}")
             raw_data = self._generate_simulated_response(engine, params)
             result_count = self._count_results(engine, raw_data)
 
             self._save_to_cache(db, cache_key, engine, params, raw_data, result_count, now)
             latency_ms = int((time.time() - start_time) * 1000)
             return raw_data, False, latency_ms
+
+        # 3. Check Daily Quota Budget for live searches
+        if not self.check_daily_budget(db):
+            logger.warning("SerpApi daily budget reached")
+            if cached:
+                logger.info(f"Serving stale SerpCache for query={params.get('q')} due to budget limit")
+                latency_ms = int((time.time() - start_time) * 1000)
+                return cached.raw_json, True, latency_ms
+            raise AppError("SERPAPI_QUOTA", "Daily search quota reached", 503)
 
         # 4. Live SerpApi Call via httpx
         req_params = {
@@ -232,6 +239,7 @@ class SerpApiClient:
                         "company_name": "InfiniSys Tech Solutions",
                         "location": loc,
                         "via": "via LinkedIn",
+                        "is_demo": True,
                         "description": (
                             "We are looking for a passionate Frontend Developer Intern to join our engineering team. "
                             "You will work closely with senior engineers to build responsive web applications. "
@@ -259,6 +267,7 @@ class SerpApiClient:
                         "company_name": "Nova Cloud Labs",
                         "location": "Ahmedabad, Gujarat",
                         "via": "via Indeed",
+                        "is_demo": True,
                         "description": (
                             "Nova Cloud Labs is hiring a Junior React Developer. "
                             "Freshers with strong portfolio projects are welcome to apply. "
@@ -283,6 +292,7 @@ class SerpApiClient:
                         "company_name": "Creative Pixel Studio",
                         "location": "Ahmedabad / Remote",
                         "via": "via Glassdoor",
+                        "is_demo": True,
                         "description": (
                             "Exciting internship opportunity for engineering students. "
                             "Work on client websites and internal dashboard tools. "
@@ -307,6 +317,7 @@ class SerpApiClient:
                         "company_name": "Apex Global Software",
                         "location": "Remote, India",
                         "via": "via Naukri",
+                        "is_demo": True,
                         "description": (
                             "Looking for fresh graduates with strong problem-solving skills and passion for frontend. "
                             "Skills: HTML, CSS, JavaScript, React, REST API, Git. "
@@ -333,18 +344,21 @@ class SerpApiClient:
                         "link": "https://thoughtworks.com/careers/graduate-program",
                         "snippet": "Join ThoughtWorks as an entry-level software engineer. Intensive learning in web development, modern JavaScript frameworks, and agile methodologies.",
                         "source": "thoughtworks.com",
+                        "is_demo": True,
                     },
                     {
                         "title": "Early Career Software Engineering Internship Program | Zomato Careers",
                         "link": "https://zomato.com/careers/internships",
                         "snippet": "Summer & winter internship programs for undergraduates in computer science. Build real customer-facing features.",
                         "source": "zomato.com",
+                        "is_demo": True,
                     },
                     {
                         "title": "Infosys InStep Global Internship Program",
                         "link": "https://infosys.com/instep",
                         "snippet": "World's top-ranked internship program for tech students. Work on cutting-edge AI, cloud, and full-stack projects.",
                         "source": "infosys.com",
+                        "is_demo": True,
                     },
                 ]
             }

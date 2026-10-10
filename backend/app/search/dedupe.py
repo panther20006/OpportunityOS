@@ -13,16 +13,23 @@ def normalize_text(text: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
-def dedupe_hash(title: Optional[str], company: Optional[str], location: Optional[str] = "") -> str:
+def dedupe_hash(
+    title: Optional[str],
+    company: Optional[str],
+    location: Optional[str] = "",
+    is_demo: bool = False,
+    external_id: Optional[str] = None,
+) -> str:
     """Generate deterministic SHA-256 deduplication hash based on normalized title, company, and location.
-
-    Formula: sha256(f"{norm(title)}|{norm(company)}|{norm(location)}")
+    Demo and live opportunities are separated cleanly via mode prefix to prevent collisions.
+    Formula: sha256(f"{'demo:' if is_demo else ''}{norm(title)}|{norm(company)}|{norm(location)}")
     Returns a 64-character lowercase hex digest string.
     """
     t_norm = normalize_text(title)
     c_norm = normalize_text(company)
     l_norm = normalize_text(location)
-    key = f"{t_norm}|{c_norm}|{l_norm}"
+    mode_prefix = "demo:" if is_demo else ""
+    key = f"{mode_prefix}{t_norm}|{c_norm}|{l_norm}"
     return sha256(key.encode("utf-8")).hexdigest()
 
 

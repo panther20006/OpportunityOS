@@ -40,10 +40,10 @@ def get_profile_response(user: User, db: Session) -> ProfileResponse:
 
     profile_complete = (
         profile is not None
-        and bool(profile.education_level)
         and (bool(profile.location_city) or profile.open_to_remote)
         and len(skill_items) > 0
         and active_goal is not None
+        and bool(active_goal.target_role)
     )
 
     return ProfileResponse(

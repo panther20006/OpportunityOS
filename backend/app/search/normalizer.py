@@ -6,17 +6,21 @@ from app.search.dedupe import dedupe_hash
 def infer_opportunity_type(title: str, schedule_type: Optional[str] = None) -> str:
     """
     Infers standard opportunity category from title and schedule metadata.
-    Returns: 'internship' | 'full_time' | 'part_time' | 'contract' | 'program' | 'fellowship' | 'career_page'
+    Returns: 'internship' | 'full_time' | 'part_time' | 'contract' | 'program' | 'fellowship' | 'hackathon' | 'grant' | 'career_page'
     """
     combined = f"{title or ''} {schedule_type or ''}".lower()
     if "intern" in combined or "trainee" in combined or "apprentice" in combined:
         return "internship"
+    if "hackathon" in combined or "hackfest" in combined or "codefest" in combined or "ideathon" in combined:
+        return "hackathon"
+    if "grant" in combined or "funding" in combined or "scholarship" in combined:
+        return "grant"
+    if "fellowship" in combined or "fellow" in combined:
+        return "fellowship"
     if "part-time" in combined or "part time" in combined:
         return "part_time"
     if "contract" in combined or "freelance" in combined or "temporary" in combined:
         return "contract"
-    if "fellowship" in combined:
-        return "fellowship"
     if "program" in combined or "bootcamp" in combined:
         return "program"
     if "career" in combined or "hiring" in combined:
@@ -29,12 +33,45 @@ def infer_opportunity_type(title: str, schedule_type: Optional[str] = None) -> s
 def is_job_remote(title: str, location: str, detected_ext: Optional[Dict[str, Any]] = None) -> bool:
     """
     Determines whether a role offers remote / work-from-home options.
+    Rejects negative indicators like 'not remote', 'onsite only', 'in-office only'.
     """
-    if detected_ext and (detected_ext.get("work_from_home") or detected_ext.get("remote")):
-        return True
     combined = f"{title or ''} {location or ''}".lower()
-    patterns = [r"\bremote\b", r"\bwork from home\b", r"\bwfh\b", r"\banywhere\b", r"\btelecommute\b"]
-    return any(re.search(p, combined) for p in patterns)
+
+    # Explicit negative check: onsite only, not remote, no wfh, etc.
+    negative_patterns = [
+        r"\bnot\s+remote\b",
+        r"\bno\s+remote\b",
+        r"\bnon[- ]remote\b",
+        r"\bnot\s+a\s+remote\b",
+        r"\bonsite\s+only\b",
+        r"\bon[- ]site\s+only\b",
+        r"\boffice\s+only\b",
+        r"\bin[- ]office\s+only\b",
+        r"\b100%\s+on[- ]site\b",
+        r"\b100%\s+onsite\b",
+        r"\bno\s+wfh\b",
+        r"\bmust\s+work\s+on[- ]site\b",
+        r"\bmust\s+be\s+on[- ]site\b",
+        r"\brelocation\s+required\b",
+    ]
+    if any(re.search(p, combined) for p in negative_patterns):
+        return False
+
+    if detected_ext:
+        if detected_ext.get("work_from_home") is True or detected_ext.get("remote") is True:
+            return True
+        if detected_ext.get("work_from_home") is False or detected_ext.get("remote") is False:
+            return False
+
+    positive_patterns = [
+        r"\bremote\b",
+        r"\bwork\s+from\s+home\b",
+        r"\bwfh\b",
+        r"\banywhere\b",
+        r"\btelecommute\b",
+        r"\bvirtual\b",
+    ]
+    return any(re.search(p, combined) for p in positive_patterns)
 
 
 def normalize_google_job(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -68,7 +105,8 @@ def normalize_google_job(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         apply_url = item["related_links"][0].get("link")
 
     opp_type = infer_opportunity_type(title, schedule_type)
-    hash_val = dedupe_hash(title, company, location)
+    is_demo = bool(item.get("is_demo", False))
+    hash_val = dedupe_hash(title, company, location, is_demo=is_demo, external_id=item.get("job_id"))
 
     return {
         "dedupe_hash": hash_val,
@@ -86,6 +124,7 @@ def normalize_google_job(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "source_via": source_via or None,
         "apply_url": apply_url,
         "posted_at_text": posted_at_text,
+        "is_demo": is_demo,
         "raw": item,
     }
 
@@ -101,6 +140,7 @@ def normalize_google_organic(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     snippet = (item.get("snippet") or "")[:8000]
     source_via = item.get("source") or item.get("displayed_link") or ""
+    is_demo = bool(item.get("is_demo", False))
 
     # Infer company from separators: ' - ', ' | ', ' • ', ' · '
     company = None
@@ -111,12 +151,19 @@ def normalize_google_organic(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             break
 
     opp_type = infer_opportunity_type(title)
-    if opp_type == "full_time" and ("program" in title.lower() or "fellowship" in title.lower()):
-        opp_type = "program"
-    elif opp_type == "full_time":
-        opp_type = "career_page"
+    if opp_type == "full_time":
+        if "program" in title.lower():
+            opp_type = "program"
+        elif "fellowship" in title.lower():
+            opp_type = "fellowship"
+        elif "hackathon" in title.lower():
+            opp_type = "hackathon"
+        elif "grant" in title.lower():
+            opp_type = "grant"
+        else:
+            opp_type = "career_page"
 
-    hash_val = dedupe_hash(title, company or "", "")
+    hash_val = dedupe_hash(title, company or "", "", is_demo=is_demo, external_id=link)
 
     return {
         "dedupe_hash": hash_val,
@@ -125,7 +172,7 @@ def normalize_google_organic(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "title": title,
         "company_name": company,
         "location": "India",
-        "is_remote": "remote" in (title + " " + snippet).lower(),
+        "is_remote": is_job_remote(title, snippet),
         "opportunity_type": opp_type,
         "schedule_type": None,
         "description": snippet,
@@ -134,8 +181,10 @@ def normalize_google_organic(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "source_via": source_via or None,
         "apply_url": link,
         "posted_at_text": None,
+        "is_demo": is_demo,
         "raw": item,
     }
+
 
 
 def normalize_google_news(item: Dict[str, Any]) -> Dict[str, Any]:

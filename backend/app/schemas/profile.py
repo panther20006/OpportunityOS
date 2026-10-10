@@ -3,13 +3,24 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from app.schemas.auth import UserResponse
 
-VALID_OPPORTUNITY_TYPES = {"internship", "full_time", "part_time", "contract"}
+VALID_OPPORTUNITY_TYPES = {
+    "internship",
+    "full_time",
+    "part_time",
+    "contract",
+    "hackathon",
+    "grant",
+    "fellowship",
+    "program",
+    "open_source",
+    "career_page",
+}
 
 
 class ProfileData(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    education_level: str = Field(..., pattern="^(high_school|diploma|bachelors|masters|phd|other)$")
+    education_level: Optional[str] = Field(None, pattern="^(high_school|diploma|bachelors|masters|phd|other)$")
     degree: Optional[str] = None
     field_of_study: Optional[str] = None
     graduation_year: Optional[int] = Field(None, ge=1990, le=2040)
@@ -57,12 +68,16 @@ class CareerGoalData(BaseModel):
     def validate_opportunity_types(cls, v: List[str]) -> List[str]:
         if not v:
             raise ValueError("Opportunity types cannot be empty")
+        normalized = []
         for t in v:
-            if t not in VALID_OPPORTUNITY_TYPES:
+            val = "full_time" if t == "job" else t
+            if val not in VALID_OPPORTUNITY_TYPES:
                 raise ValueError(
                     f"Invalid opportunity type '{t}'. Must be one of {sorted(VALID_OPPORTUNITY_TYPES)}"
                 )
-        return v
+            if val not in normalized:
+                normalized.append(val)
+        return normalized
 
 
 class ProfileResponse(BaseModel):

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: opportunityos-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: opportunityos-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRE_MINUTES
+        value: 1440
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: SERPAPI_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+
+databases:
+  - name: opportunityos-db
+    databaseName: opportunityos
+    user: opportunityos

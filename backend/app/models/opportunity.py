@@ -41,6 +41,7 @@ class Opportunity(Base):
     first_seen_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     last_seen_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     raw = Column(JSON, nullable=True)
+    is_demo = Column(Boolean, default=False, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     skills = relationship("OpportunitySkill", back_populates="opportunity", cascade="all, delete-orphan")
@@ -52,7 +53,7 @@ class Opportunity(Base):
     __table_args__ = (
         CheckConstraint("source_engine IN ('google_jobs','google')", name="chk_opp_source_engine"),
         CheckConstraint(
-            "opportunity_type IN ('internship','full_time','part_time','contract','career_page','program','unknown')",
+            "opportunity_type IN ('internship','full_time','part_time','contract','career_page','program','hackathon','grant','fellowship','unknown')",
             name="chk_opp_opportunity_type",
         ),
     )

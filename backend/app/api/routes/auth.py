@@ -71,10 +71,10 @@ def login(request: Request, req: UserLoginRequest, db: Session = Depends(get_db)
     )
     profile_complete = bool(
         profile
-        and profile.education_level
         and (profile.location_city or profile.open_to_remote)
         and skills_count > 0
         and active_goal
+        and active_goal.target_role
     )
 
     token = create_access_token(user.id, user.email)
